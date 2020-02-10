@@ -78,7 +78,7 @@ sort(friends, decreasing = TRUE)
 
 ========================================================
 
-### Task 3 - A dataset on immigration trips to Ellis Island  [4 points in total]
+### Task 3 - A dataset on immigration trips to Ellis Island  [5 points in total]
 
 a) Load the dataset `immigration-ellis.tsv` into R, which contains data on immigration to Ellis Island (1918-1922) by trip. [1 point]
 
