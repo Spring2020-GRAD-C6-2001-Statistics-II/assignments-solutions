@@ -1,0 +1,181 @@
+---
+title: "Assignment 2 - Statistics II, Hertie School"
+output: html_document
+---
+
+
+```{r,include=FALSE}
+# Load Libraries
+library(tidyverse)
+library(ggdag)
+```
+
+
+### Task 1 Should you brush your teeth? [5 points in total]
+
+In a [blog post](https://chrisblattman.com/2010/06/01/does-brushing-your-teeth-lower-cardiovascular-disease/), Christopher Blattman discusses a study published in the British Medical Journal that reports that participants who brushed their teeth less often had a 7%-points increase in the occurrence of a cardiovascular disease.
+
+(a)  Let B = 1 if you brush your teeth often, and B = 0 if you don’t. Let H = 1 be the occurrence of a heart disease, H = 0 if not. Write down the naive average treatment effect (NATE) for the result that the researchers obtained (assuming they had population data). Discuss two sources of bias when comparing the NATE to the average treatment effect ATE.  [2 Pts]
+
+_The naive average treatment effect is given by:_
+
+\[ NATE = E[H^1 | B=1]  -  E[H^0 | B=0]\]
+
+_Both terms of the NATE are observable. The total bias is the difference between the NATE and the ATE and has two components. a) The baseline bias and c) differential treatment effects between treatment and control group. A source for baseline bias could be (in the words of Chris Blattman) that "those who brush their teeth several times a tay generally take better care of themselves and what what they eat." A source for different treatment effect bias could be that toothbrushing works better for the same group because they use high-quality toothbrush or know how to brush their teeth properly._
+
+(b) Draw a causal graph with variables "Brush Teeth" (B), "Heart Disease" (H), and (individual-level) "Health Consciousness" (C) that formalizes a possible argument for why the observed association might not be a causal effect. [2 Pts]
+
+```{r}
+dag  <- dagify(
+  H ~ B,
+  B ~ C,
+  H ~ C,
+  exposure = "B",
+  outcome = "H")
+
+ggdag(dag, layout = "circle") + theme_dag_blank()
+
+```
+
+_Health Consciousness works as a confounder (common cause) for the relationship between brushing teeth and the heart disease. Not conditioning on the confounder will introduce bias. In the POF, this is called baseline bias._ 
+
+(c) Suggest a research design that is more robust against confounders to identify the causal effect between teeth brushing and cardiovascular disease! [1 Pt]
+
+_A randomized experiment in which the investigators randomly forces people to brush their teeth (Treatment) and other people to not (control group) would identify the ATE. In our society, this might be a bit problematic because many people brush their teeth anyway, but one could instead randomly assign teeth brushes in contexts where P(B = 1) << 1 or randomly assign incentives for regular teeth brushing and then monitor compliance with app connected to smart teeth brush._
+
+
+<br>
+========================================================
+
+
+### Task 2 - Simulating a basic structural causal model in R [6 points in total]
+
+In R, it is straightforward to generate simulated data from a structural causal model. For instance, a simple confounder structure would be:
+
+```{r}
+animal <- rep(c("cat", "dog"), each = 500)
+weight <- rnorm(1000, 4, .5) + 10 * as.numeric(animal == "dog")
+sleepDaily <- rnorm(1000, 15, 2) - 2 * as.numeric(animal == "dog")
+dat <- data.frame(animal, weight, sleepDaily, stringsAsFactors = FALSE)
+```
+
+
+(a) Run the code in R and then use the plot() command (or commands from the ggplot2 package if you are familiar with that) to show visually how weight and daily sleep in hours are related! Ensure that the plot is formatted nicely. [2 Pts]
+
+```{r, fig.height=6,fig.width=6}
+p <- ggplot(dat, aes(x=sleepDaily, y=weight)) +
+    geom_smooth(method = "lm", se=F, col="black") + 
+    geom_point() +
+    theme_minimal()
+
+p    
+```
+
+(b) Adapt the plot in a way that highlights the role of the species in the causal model! [1 Pt]
+
+```{r}
+ggplot(dat, aes(x=sleepDaily, y=weight,col=animal, group=animal)) +
+    geom_smooth(method = "lm", se=F, col="black") + 
+    geom_point(aes()) +
+    theme_minimal()
+```
+
+(c) Now set up another simulation to verify (in)dependencies for a simple collider structure! [3 Pts]
+
+```{r}
+X <- rnorm(1000, 4, .5) # Exogenous X
+Y <- rnorm(1000, 0, .5) + 0*X # No effect of X
+C <-  ifelse( X + Y > 4, "Collider = 1" ,"Collider = 0" ) # Binary Collider easier to interpret
+dat <- data.frame(Y, X, C, stringsAsFactors = FALSE)
+
+
+# No Condintioning
+ggplot(dat, aes(x=X, y=Y)) +
+    geom_smooth(method = "lm", se=F, col="black") + 
+    geom_point(aes()) +
+    theme_minimal()
+
+# Conditioning on Collider
+ggplot(dat, aes(x=X, y=Y,col=C, group=C)) +
+    geom_smooth(method = "lm", se=F, col="black") + 
+    geom_point(aes()) +
+    theme_minimal()
+
+```
+
+
+<br>
+
+========================================================
+
+### Task 3 - Bad for him, Bad for her, but Good for everyone - wait what? [5 points in total]
+
+A doctor takes a look at research data about a new drug that promises to reduce the risk of heart disease. As an outcome, the doctor measured if patients had a heart attack or not. She studies both the effect among female and male patients. The doctor did not randomize the treatment with the new drug, instead, patients were able to decide whether they want to take the treatment or not.
+
+| Groups       | Heart Attack & Drug  | No Heart Attack & Drug | Heart Attack & No Drug   | No Heart Attack &  No Drug |   
+|------------- | ------------- | ------------- | ------------- |------------- |
+|Female        | 1             | 19            | 3             | 37           |
+|Male          | 12            | 28            | 8             | 12           |
+|Total         | 13            | 47            | 11            | 49           |
+
+
+```{r}
+trial_data <- data.frame("Gender"=c("Female","Female","Male","Male"),
+                         "Treatment"=c("Drug","NoDrug","Drug","NoDrug"),
+                         "HeartAttack"=c(1,3,12,8),
+                         "NoHeartAttack"=c(19,37,28,12))
+```
+
+
+(a) What is the naive average treatment effect of taking the drug on having a heart attack for everyone? What is the naive treatment effect for female and male patients? [2 Pts]
+
+```{r}
+# NATE for everyone
+trial_data %>%
+  group_by(Treatment) %>%
+  summarise_at(c("HeartAttack","NoHeartAttack"), sum) %>%
+  mutate(share = HeartAttack/(HeartAttack + NoHeartAttack))  %>%
+  select(Treatment,share) %>% 
+  spread(Treatment,share) %>%
+  mutate(NATE = Drug - NoDrug) %>% 
+  pull(NATE)
+
+
+# NATE for male and female
+malefemale <- trial_data %>% 
+  mutate(share = HeartAttack/(HeartAttack + NoHeartAttack)) %>% 
+  select(Gender, Treatment,share) %>%
+  spread(Treatment,share) %>% 
+  mutate(NATE = Drug - NoDrug) %>% 
+  select(Gender, NATE)
+
+malefemale
+
+```
+
+_The NATE of the drug for everyone is positive with 0.033 or about 3 percentage points. But the ATE is negative both for male (-0.1) and female patients (-0.025)._ 
+
+(b) Draw a DAG that helps you explain why the drug seems to be bad for females, bad for males, but good for everyone. What kind of bias creates this reversal in the effect? [1 Pt]
+
+```{r}
+dag  <- dagify(
+  HeartAttack ~ Drug,
+  Drug ~ Gender,
+  HeartAttack ~ Gender,
+  exposure = "B",
+  outcome = "H")
+
+ggdag(dag, layout = "circle") + theme_dag_blank()
+```
+
+_Again, Gender works as a confounder. The paradox that the effect changes when analyzing the aggreagte versus specific groups is known as [Simpson's paradox](https://de.wikipedia.org/wiki/Simpson-Paradoxon)._
+
+(c) How could you calculate the causal effect taking the information about both male and female patients into account? [2 Pts]
+
+_The ATE can be calculated by conditioning on gender. We can achieve this by combining the treatment effects in the female and male group and weighting them by group size. As in the study, the groups are of equal size, so the ATE simply is the mean of the two NATEs, which gives an ATE of -0.0625. Hence, the drug reduces the chance of a heart attack by about 6 percentage points._
+
+```{r}
+mean(malefemale$NATE)
+```
+
+
