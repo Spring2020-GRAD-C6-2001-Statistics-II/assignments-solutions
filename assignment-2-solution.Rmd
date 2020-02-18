@@ -168,7 +168,7 @@ dag  <- dagify(
 ggdag(dag, layout = "circle") + theme_dag_blank()
 ```
 
-_Again, Gender works as a confounder. The paradox that the effect changes when analyzing the aggreagte versus specific groups is known as [Simpson's paradox](https://de.wikipedia.org/wiki/Simpson-Paradoxon)._
+_Again, Gender works as a confounder. Selection bias / baseline bias / omitted variable bias is at work here. The paradox that the effect changes when analyzing the aggreagte versus specific groups is known as [Simpson's paradox](https://de.wikipedia.org/wiki/Simpson-Paradoxon)._
 
 (c) How could you calculate the causal effect taking the information about both male and female patients into account? [2 Pts]
 
