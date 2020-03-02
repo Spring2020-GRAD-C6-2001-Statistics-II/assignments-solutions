@@ -1,0 +1,202 @@
+---
+title: "Assignment 4 - Solution - Statistics II, Hertie School"
+output: html_document
+---
+
+
+```{r,include=FALSE}
+# Load libraries
+library(tidyverse)
+library(xtable)
+library(MatchIt)
+```
+
+
+### Task 1 - Another causal graph [5 points in total]
+
+After months of deep thought, you decide that your thesis will focus on the relationship between X and Y. In preparation for the meeting with your supervisor, you read all the relevant literature, conduct interviews, and finally write down a directed acyclic graph that you believe captures all of the relevant variables, and their inter-relationships (see figure below). You proudly present the DAG below to your supervisor.
+
+![](04-DAG.png)
+
+(a) For your DAG, write down all paths from X to Y. Which paths are causal? [2 pts]
+
+<div style="color:blue">
+<ul>
+  <li> {X -> Y}  (causal path) </li>
+  <li> {X -> Z3 -> Y}   (causal path) </li>
+  <li> {X <- Z4 -> Z1 -> Y} </li>
+  <li> {X <- Z4 -> Z1 <- Z2 -> Y} </li>
+  <li> {X <- Z1 <- Z2 -> Y} </li>
+  <li> {X <- Z1 -> Y} </li>
+</div>
+
+(b) In the path {X ← Z4 → Z1 ← Z2 → Y , what type of node is Z1? Does conditioning on Z1 block or unblock this path from X to Y? Briefly explain your answer. [1 pt]
+
+<div style="color:blue">
+Z1 is a collider. That means that it is simultaneously the child of two variables, and the parent of none (in this path). Without conditioning on Z1, Z1 blocks the path. Conditioning on Z1 would unblock the path.
+</div>
+
+(c) Now consider path {X ← Z1 → Y }. Does conditioning on Z1 block or unblock this path? Briefly explain your answer. [1 pt]
+
+<div style="color:blue">
+Z1 is a confounder. Failing to condition on it will open a back-door path between X and Y; conditioning will block the path.
+</div>
+
+(d) Based on your DAG, list the minimum conditioning sets that satisfy the back-door criterion for identifying the effect of X on Y. [1 pt]
+
+<div style="color:blue">
+{Z1, Z4}; {Z1, Z2}. Conditioning on either of these sets (note they are minimum) will satisfy the back-door criterion. 
+</div>
+
+<br>
+========================================================
+
+
+### Task 2 - The consequences of child soldiering [12 points in total]
+
+In this problem you will analyze the data in `child_soldiering.csv` from the Blattman and Annan (2010) article “The Consequences of Child Soldiering” (also in your assignment folder). The authors are interested in the impact of abduction by the Lord's Resistance Army on political, economic, and psychological outcomes; the data are from a survey of male youth in war-affected regions of Uganda. We will focus on the effect of abduction, which appears in the data as abd, on years of education, educ. Other variables in the data are:
+
+- C.ach, C.akw, etc.: sub-district identifiers
+- age: respondent’s age in years
+- fthr.ed: father’s education (years)
+- mthr.ed: mother’s education (years)
+- orphan96: indicator for whether parents died before 1997
+- fthr.frm: indicator for whether father is a farmer
+- hh.size96: household size in 1996
+
+(a) Use the difference-in-means estimator to estimate the NATE of abduction on education without adjusting for any of the covariates, and report your estimate along with a confidence interval. [2 pts]
+
+```{r, message=FALSE}
+# Load Data
+dat <- read_csv("child_soldiering.csv") %>% as.data.frame()
+covars <- names(dat)[-1]
+```
+
+
+```{r}
+# Calcualte NATE 
+nate = mean(dat$educ[dat$abd == 1]) - mean(dat$educ[dat$abd == 0])
+nate
+with(dat, t.test(educ[abd ==1],educ[abd ==0]))
+```
+
+<div style="color:blue">
+The NATE is around -0.6 with 95\% confidence intervals ranging from -1.03 to -0.16.
+</div>
+
+
+(b) Check covariate balance in the unmatched dataset. Your output should be in the form of a balance table. Based on your table, which of the observed covariates seem to imply the strongest differences between those who were abducted and those who were not? [2 pts]
+
+```{r, results="asis"}
+# pre-matching balance table
+tab <- dat %>%
+  group_by(abd) %>%
+  summarise_all(list(mean = mean), na.rm = TRUE) %>%
+  select(-1) %>% # Don't include abducation
+  t() %>% `colnames<-`(c("abducted = 0", "abducted = 1"))
+
+print(xtable(tab, 
+             caption="Balance table, full sample"), 
+              "html", include.rownames=TRUE, caption.placement='top',
+               html.table.attributes='align="left"')
+```
+
+
+<div style="color:blue">
+There's substantive between-district variation (all the C.* variables). Also, age, education of the parents and the child as well as  household size and education (parents) differ on average. (For reviewers: Not all variables have to be mentioned by the authors - it's a matter of individual judgement what is considered a "strong difference".)
+</div>
+
+
+
+(c) Now consider the authors’ description of abduction:
+
+_Abduction was large-scale and seemingly indiscriminate; 60,000 to 80,000 youth are estimated to have been abducted and more than a quarter of males currently aged 14 to 30 in our study region were abducted for at least two weeks. Most were abducted after 1996 and from one of the Acholi districts of Gulu, Kitgum, and Pader._
+
+_Youth were typically taken by roving groups of 10 to 20 rebels during night raids on rural homes. Adolescent males appear to have been the most pliable, reliable and effective forced recruits, and so were disproportionately targeted by the LRA. Youth under age 11 and over 24 tended to be avoided and had a high probability of immediate release._
+
+Given this description and your what you found in (b), choose some covariates on which to perform an exact match, and then do so. Report an ATT estimate, i.e. an estimate of the average effect of abduction on education among those who were abducted. [2 pts]
+
+```{r}
+# Perform Exact Marching
+mod_match <- matchit(abd ~ age + fthr.ed + mthr.ed + fthr.frm + C.ach + C.akw + C.ata + C.oro + C.paj,
+                     method = "exact", # exact matching
+                     data = dat)
+
+# Calculate estimate of ATE for exact matching
+dat_match <- match.data(mod_match)
+mean(dat_match$educ[dat_match$abd == 1]) - mean(dat_match$educ[dat_match$abd == 0])
+with(dat_match, t.test(educ[abd ==1],educ[abd ==0]))
+```
+<div style="color:blue">
+The matching estimate of the ATT is around -0.81 with 95\% conifdence intervals ranging from -0.04 to -1.59.
+</div>
+
+
+(d) Next, specify a logit model to generate the propensity scores, show the output of the model, and provide a plot that compares the distribution of the propensity scores for the treated and untreated units (before matching). [3 pts]
+
+```{r}
+# Run logit regression
+m_ps <- glm(abd ~ age + fthr.ed + mthr.ed + hh.size96 + C.ach + C.akw + C.ata + C.oro + C.paj, family = binomial(), data = dat)
+summary(m_ps)
+
+# Extract predicted probabilities
+prs_df <- data.frame(pr_score = predict(m_ps, type = "response"),
+                     abd = m_ps$model$abd)
+
+# Plot propensity scores by treatment group to explore common support
+plot(density(prs_df$pr_score[prs_df$abd==1]), main = "Propensity score distribution, treatment and control groups") 
+lines(density(prs_df$pr_score[prs_df$abd==0]), lty=2) 
+legend(0.1,3.5, lty=c(1,2),legend = c("Treated", "Control"))
+```
+
+(e) Now, apply nearest neighbor matching with a 1:1 ratio and replacement on the propensity scores to estimate the ATT and plot the densities of the propensity scores for the treated and untreated units. Assess balance using a table, as before. [3 pts]
+
+```{r}
+# Perform matching
+mod_match <- matchit(abd ~ age + fthr.ed + mthr.ed + hh.size96 + C.ach + C.akw + C.ata + C.oro + C.paj,
+                     method = "nearest", 
+                     replace = TRUE, 
+                     ratio = 1, 
+                     data = dat)
+
+
+# Calculate estimate of ATE for nearest neighbor matching
+dat_match <- match.data(mod_match)
+mean(dat_match$educ[dat_match$abd == 1]) - mean(dat_match$educ[dat_match$abd == 0])
+with(dat_match, t.test(educ[abd ==1],educ[abd ==0]))
+```
+
+<div style="color:blue">
+The matching estimate of the ATT for nearest neighbor matching is around -0.67 (in some runs it can also be -.66 with the exact same specifications; reviewers: be generous here!) with 95\% confidence intervals ranging from -0.16 to -1.20 (same here; be generous if the results do not exactly match).
+</div>
+
+
+```{r}
+# Plot propensity cores
+plot(density(dat_match$distance[dat_match$abd==1]), main = "Propensity score distribution, treatment and control groups") 
+lines(density(dat_match$distance[dat_match$abd==0]), lty=2) 
+legend(0.1,3.5, lty=c(1,2),legend = c("Treated", "Control"))
+```
+
+<div style="color:blue">
+The propensity scores in the nearest neighbor matching in the control and treated group overlap stronger compared to the non-matched sample. But there is still a remaining difference in the distributions of the propensity scores between the two groups. (For reviewers: We did not explicitly ask for a discussion of the density plot, so don't penalize authors if they didn't provide one.)
+</div>
+
+```{r, results='asis'}
+# pre-matching balance table
+tab <- dat_match %>%
+  group_by(abd) %>%
+  summarise_all(list(mean = mean), na.rm = TRUE) %>%
+  select(-1) %>% # Don't include abducation
+  t() %>% `colnames<-`(c("abducted = 0", "abducted = 1"))
+
+print(xtable(tab, 
+             caption="Balance table, Matched Sample Propensity Score Matching Nearest Neighbor"), 
+              "html", include.rownames=TRUE, caption.placement='top',
+               html.table.attributes='align="left"')
+
+```
+
+<div style="color:blue">
+Nearest Neighbor Matching reduces the variation between districts in the matched sample. The means of household size and education (parents) are closer toegther. There is still a remaining difference in the average age between the control and treatment group. (For reviewers: We did not explicitly ask for a discussion of the balance table, so don't penalize authors if they didn't provide one.)
+</div>

@@ -1,0 +1,163 @@
+---
+title: "Assignment 3 - Statistics II, Hertie School"
+output: html_document
+---
+
+
+```{r,include=FALSE}
+library(tidyverse)
+library(ggdag)
+library(wooldridge)
+```
+
+
+### Task 1 - Interpreting a causal graph [7 points in total]
+
+Inspect the causal graph you see below (or attached in DAG.png) and answer the following questions:
+
+![](DAG.png)
+
+(a) Replicate the DAG using `ggdag`! [2 Pts] 
+
+```{r}
+dag_example <- dagify(Y ~ M + D + U_lat + Z,
+                          U_lat ~ X, 
+                          D ~ X + Z,
+                          M ~ D + Z,
+                         latent = "U_lat",
+                         outcome = "Y",
+                         exposure = "D")
+
+ggdag(dag_example, text = TRUE, stylized = TRUE)
+```
+
+<div style="color:blue">
+Note for reviewers: The positions of the nodes in the coordinate system is not important.
+</div>
+
+
+(b) Say you are interested in determining the causal effect of D on Y. What are back-door paths in this case? [2 Pts]
+
+<div style="color:blue">
+D <- Z -> Y
+<br>
+D <- Z -> M -> Y
+<br>
+D <- X -> U -> Y
+</div>
+
+(b) What variables could you condition on to satisfy the backdoor criterion? [2 Pts]
+
+<div style="color:blue">
+X and Z, X and Z and M (which is inferior because controlling for mediator induces post-treatment bias, so the latter one doesn't need to be mentioned in the solution).
+</div>
+
+(c) Now assume that you could observe U. Would this affect the validity of your solution in (b)? Would there be another solution? [1 Pt]
+
+<div style="color:blue">
+The solution whould still be valid, but now, U and Z would also satisfy the backdoor criterion.
+</div>
+
+<br>
+========================================================
+
+
+### Task 2 - Unemployment Rate and Turnout [9 points in total]
+
+In the study "Economic Discontent as a Mobilizer: Unemployment and Voter Turnout", Burden and Wichowsky argue that "a worsening economy has a disruptive effect that prods worried citizens to voice concern and seek remedies." They investigate the effect the unemployment rate has on voter turnout at the county level in US presidential elections from 1976 to 2008. Please find the data they used for their study in BWJOP.RDS and a Codebook at the end of the assignment.
+
+  
+(a) Estimate the following model: Turnout = beta0 + beta1*Unemploy_County + beta2*PcntBlack + u [1 Pt]
+
+```{r}
+dat <- readRDS("BWJOP.RDS")
+model_out <- lm(Turnout ~ Unemploy_County + PcntBlack, data = dat)
+summary(model_out)
+```
+
+(b) What is the estimated change in the turnout rate with an increase of the unemployment rate by 4 percentage points, holding the % high school graduates constant? And what is the estimated turnout rate for an unemplyoment rate of 8% in a county with 10% black population? Do your findings align with the argument of the authors? [3 Pts]
+
+```{r}
+coef(model_out)["Unemploy_County"] * 4
+(coef(model_out)[1] + coef(model_out)["Unemploy_County"] * 8 + coef(model_out)["PcntBlack"] * 10)
+predict(model_out, newdata = data.frame(Unemploy_County = 8, PcntBlack = 10)) # alternative solution using the predict() command
+```
+
+<div style="color:blue">
+This is in tension with the authors' argument. They argue that higher unemployment leads to higher turnout rates. In the specification above, we find a negative effect.
+</div>
+
+(c) What percentage of the variation in turnout rate is explained by the two variables? Is this important for the interpretation of the causal effect of unemplyoment on turnout? [2 Pts]
+
+<div style="color:blue">
+R^2 in the model, i.e. about 11%. For the interpretation of the causal effect of unemployment on turnout, this can be neglected because we are not interested in explaining/predicting the full variance of turnout but just want to identify the causal effect of unemployment of turnout. 
+</div>
+
+(d) Now extend the model by adding more covariates. Your goal is to estimate the causal effect of unemployment on turnout. Choose additional covariates accordingly, justify your choice, and explain potential differences between the new beta_1 and the old beta_1! [3 Pts]
+
+```{r}
+model_out2 <- lm(Turnout ~ Unemploy_County + PcntBlack + ZPcntHSGrad, data = dat)
+summary(model_out2)
+```
+
+<div style="color:blue">
+High school graduates could be an important confounder (recall discussion in class/lab). Indeed, we find that controlling for ZPcntHSGrad, the estimated coefficient for Unemploy_County switches direction.
+
+Note for reviewers: This is just one of many possible extensions. Please accept any additional controls that come with a plausible justification. 
+</div>
+
+
+
+
+<br>
+========================================================
+
+
+### Task 3 - Simulating post-treatment bias in R [5 points in total]
+
+Demonstrate how post-treatment bias can diminish the estimated full effect of a normally distributed variable X (mean 0, sd 1) on Y. X is supposed to affect Y both directly and through mediator M. The relationship between all variables can assumed to be linear. To demonstrate, simulate the data-generating process using R. Then, show the bias by comparing the estimates of linear models, once with, once without controlling for M!
+
+
+```{r}
+set.seed(42)
+N <- 500
+x <- rnorm(N, 0, 1)
+em <- rnorm(N, 0, .5)
+m <- .8*x + em  # m is mediator
+ey <- rnorm(N, 0, .5)
+y <- x + m + ey
+
+cor(cbind(y, x, m))
+plot(x, y)
+
+# complete "true" models
+summary(lm(m ~ x))
+summary(lm(y ~ x))
+
+# model with induced post-treatment bias
+summary(lm(y ~ x + m))
+```
+
+
+<br>
+========================================================
+
+### Codebook for BWJOP.RDS
+
+Variable Name | Description
+--------------- | -----------------------------
+"FIPS_County" | County Code
+"county" | County Name
+"state" | Stata Name
+"Turnout" | Turnout rate at presidential election
+"Turnout_Lag" | Turnout rate at last election
+"Unemploy_County" | County unemplyoment rate
+"Unemploy_State" | State unemplyoment rate
+"ZPcntHSGrad" | Logarithm of % high college graduates in the county
+"closeness" | Presidential campaign competitiveness
+"pop" | Population
+"PcntBlack" | % Black in the county
+"AdjIncome" | Median income in the county
+"SenElection" | Simultaneous senatorial election
+"GubElection" | Simultaneous gubernatorial election
+"Yr*"       | A set of dummies to indicate presidential election year
