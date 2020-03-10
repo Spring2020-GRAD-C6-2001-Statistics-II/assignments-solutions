@@ -1,0 +1,188 @@
+---
+title: "Assignment 5 - Statistics II, Hertie School"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(haven)
+library(ggdag)
+library(xtable)
+library(summarytools)
+library(AER)
+library(MASS)
+```
+
+<br>
+
+### Task 1 - On the search for plausible instruments [4 points in total]
+
+Come up with a plausible instrument in the following scenarios and justify your choice in 1-3 sentences.
+
+(a)  Scenario 1 [2 pts] <br>
+Units: US counties at US House election <br>
+Treatment: voter turnout  <br>
+Outcome: share of Democrat party <br>
+
+<div style="color:blue">
+Pausible instrument: Deviation from average rainfall or temperature in a given region/county/state. Rainfall can be a plausibly exogenous instrument for turnout (see Hansford/Gomez 2010, APSR, https://www.cambridge.org/core/journals/american-political-science-review/article/estimating-the-electoral-effects-of-voter-turnout/8A880C28E79BE770A5CA1A9BB6CF933C) if average levels are accounted for. The idea is that rainfall (or high/low temperature) provides a random exogenous shock that makes people a little less (or more) likely to turn out. 
+
+Other potentially plausible (but also potentially flawed) instruments: "distance to the polling location", "randomized encouragement to register". Note to reviewers: Any suggestion that does not obviously violate the exclusion restriction assumption or the ignorability assumption is fine here. 
+</div>
+
+<br>
+
+(b) Scenario 2 [2 pts]  <br>
+Units: Voters  <br>
+Treatment: exposure to Fox News  <br>
+Outcome: vote for Republican party <br>
+
+<div style="color:blue">
+Plausible instruments: Encouragement design (i.e., randomly encourage subjects to watch Fox News); variation in the geographical roll-out of Fox News (DellaVigna & Kaplan, QJE 2007, https://www.nber.org/papers/w12169); differential positioning in the channel list (Martin & Yurukoglu, AER 2017, https://www.aeaweb.org/articles?id=10.1257/aer.20160812). In all cases, the idea is to increase the probability of Fox News exposure by either explicitly encouraging subjects to watch it or by exploiting the fact that the channel was available to earlier to some subjects than to others (or is more likely to being watched by chance). 
+
+Note ro reviewers: Again, any suggestion that does not obviously violate the exclusion restriction assumption or the ignorability assumption is fine here. Just "owning a TV" is probably not enough because ignorability might be violated through the influence of, e.g., age or income.
+</div>
+
+<br>
+
+### Task 2 - Bert and Ernie's impact on letter recognition [14 points in total]
+
+Suppose we want to estimate the effect of watching an educational television program - Sesame Street - on letter recognition. We might consider implementing a randomized experiment where the participants are preschool children, the treatment of interest is watching Sesame Street, the control condition is not watching, and the outcome is the score on a test of letter recognition. It is not possible here for the experimenter to force children to watch a TV show or to refrain from watching (the experiment took place while Sesame Street was on the air).
+
+```{r, message=F}
+dat <- read_dta("sesame.dta")
+```
+
+Using the dataset `sesame.dta` where letter recognition is the outcome of interest (`postlet`), regularly watching Sesame Street is the treatment (`regular`) and the encouragement to watch is the instrument (`encour`), do the following:
+
+(a) Discuss the assumptions needed for the identification of the Sesame Street effect and potential violations. [4 pts]
+
+<div style="color:blue">
+1. Relevance: Encouragement seems to have a substantial effect on Sesame Street viewership (see below) -- OK.
+
+2. Ignorability: Given the randomization of encouragment, seems plausible that potential treatments and outcomes are not affected by instrument. 
+
+3. Exclusion restriction: Again, randomization makes this rather plausible, but it could be that encouragement of the children could create demand effects among "treated" parents, who start to look more after their children (which could boost the test scores).
+
+4. Monotonicity: Some kids might be prone to defy (only things that are NOT allowed are interesting...).
+</div>
+
+<br>
+
+(b) Illustrate visually the difference in the outcome of interest between the treatment and the control group. [2 pts]
+
+```{r, message=F}
+# Outcome density plot by treatment groups
+ggplot(dat, aes(x = postlet, fill = as.factor(regular))) +
+    geom_density(alpha=0.4)
+```
+
+<div style="color:blue">
+Note to reviewers: This is just one of many ways to illustrate the differences. What is important is that a difference on the OUTCOME variable (here: postlet) is shown betwen different TREATMENT groups (i.e., on the "regular" variable, NOT the encour assignment variable).
+</div>
+
+
+<br>
+
+(c) What do we know about non-compliance in the data? Give a table or visual representation plus short description. Also, report a statistic showing whether the encouragement can or cannot be considered a strong instrument. [2 pts]
+
+```{r, message=F}
+ctable(dat$regular, dat$encour,  prop = "n")
+
+# F test from first stage regression
+summary(lm(regular ~ encour, data = dat))
+```
+
+<div style="color:blue">
+Noncompliance on both sides is an issue, although there seem to be relatively more always-takers than never-takers: Many children regularly watch the show despite not being encouraged to do so. On the other hand, only few who have been encouraged don't watch it. The F-statistic from the first-stage regression is much greater than 10, indicating a strong instrument by conventional levels. 
+</div>
+
+<br>
+
+(d) Provide a naïve estimate of watching on letter recognition, ignoring the encouragement mechanism. Then, use other variables in the data set for a selection-on-observables approach to calculate a less-naïve estimate. [3 pts]
+
+```{r, eval= TRUE}
+# naive model based on observed treatment (disregarding assignment)
+model_naive <- lm(postlet ~ regular,  data = dat)
+summary(model_naive)
+```
+
+```{r, eval= TRUE}
+# naive model based on observed treatment (disregarding assignment)
+# variable description available here: http://www.stat.columbia.edu/~gelman/arm/examples/sesame/
+# site: 
+  # 1 = Three to five year old disadvantaged children from inner city areas in various parts of the country.
+  # 2 = Four year old advantaged suburban children. 
+  # 3 = Advantaged rural children.
+  # 4 = Disadvantaged rural children.
+  # 5 = Disadvantaged Spanish speaking children.
+
+# setting: (in which Sesame Street was viewed)
+  # 1 = home
+  # 2 = school
+
+# pre...: pretest scores on various tests
+
+model_less_naive <- lm(postlet ~ regular + sex + age + as.factor(site) + setting + prelet + prebody + preform + prenumb + prerelat + preclasf,  data = dat)
+summary(model_less_naive)
+```
+
+<div style="color:blue">
+Note to reviewers: As we did not provide a variable description in the assignment instructions, authors do not need to justify their picks of additional covariates. I.e. using just any covariate(s) additional to regular is fine.
+</div>
+
+<br>
+
+(e) Provide estimates for the ITT and the LATE and give a brief substantive interpretation of both results! [3 pts]
+  
+```{r, eval= TRUE}
+# ITT model based on encouragement assignment
+model_itt <- lm(postlet ~ encour,  data = dat)
+summary(model_itt)
+
+# IV model to identify LATE
+model_late <- ivreg(postlet ~ regular | encour, data = dat)
+summary(model_late, diagnostics = TRUE)
+
+# check out https://stats.stackexchange.com/questions/134789/interpretation-of-ivreg-diagnostics-in-r to see what the other diagnostics mean
+```
+
+<div style="color:blue">
+The ITT indicates that there might be a modest positive effect of encouragement on letter recognition scores (+ about 3 points) on average. Among compliers, the effect is much stronger (+ about 8 points) and significant at the 10% level. Given the IV setup, we can attribute a causal meaning to these effects.
+</div>
+
+<br>
+
+### Task 3 - Simulating a flawed instrument [3 points in total]
+
+Go back to the simulation code from the Lab and refine it such that Z is a flawed instrument as it is also connected with Y through a variable other than X. Then, show how these modifications change the estimates of the original setup!  [3 pts]
+
+<br>
+
+```{r}
+# generate xStar and c and using a common variance
+set.seed(47)
+xStarAndC <- MASS::mvrnorm(1000, c(20, 15), matrix(c(1, 0.5, 0.5, 1), 2, 2))
+xStar <- xStarAndC[, 1]
+c <- xStarAndC[, 2]
+
+# z is now strongly related to c; x is a combination of xStar and z
+z <- rnorm(1000) + 0.5*c
+x <- xStar + z
+
+# generate the response variable y
+y <- 1 + x + c + rnorm(1000, 0, 0.5)
+
+# check to make sure everything has worked so far
+cor(x, c) # moderate correlation
+cor(z, c) # moderate correlation too!
+
+# let's estimate the full model (i.e. the "true model" assuming we knew c)
+lm(y ~ x + c) # same as in the original simulation
+
+# IV estimation: Estimated coefficient on x is much larger than in the original simulation with a valid instrument
+model_iv <- ivreg(y ~ x | z, data = data.frame(y, x, z))
+summary(model_iv)
+```
+
+
