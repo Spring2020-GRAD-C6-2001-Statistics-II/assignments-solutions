@@ -1,0 +1,253 @@
+---
+title: "Assignment 6 - Solution - Statistics II, Hertie School"
+output: html_document
+---
+
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(haven)
+library(ggdag)
+library(xtable)
+library(summarytools)
+library(rdd)
+```
+
+
+#### 1 - Partisan ties and resource allocation in Ghana [13 points in total]
+
+Do constituencies in Ghana that elect MPs who are from the same party as the President (the ruling party) receive more electrification over the next four years? Use the dataset `GhanaRD.csv` to find out. Here is a short description of the data:
+  
+- _constit:_ constituency
+- _voteshare:_ vote share of MP from ruling party in a constituency
+- _treatment:_ elected MP from from ruling party
+- _changeNL_1996_2000:_ change in electrification from 1996 to 2000 measured using nightlight emissions
+- _mean_1995:_ electrification in 1995
+
+```{r, message=F, warning=F}
+#load data
+dat <- read_csv("Ghana_RD.csv")
+```
+
+<br> 
+
+(a) Does it make sense to employ a sharp RD in this case? Provide a visual check and a brief interpretation of what you see! [2 pts]
+
+```{r, message=F}
+# code forcing variable so threshold at 50% 
+# in other words = margin of victory
+dat$forcing <- dat$voteshare - 50
+
+# make plot of treatment status and forcing variable
+plot(dat$forcing, dat$treatment, 
+     main = "Forcing variable and treatment status", 
+     xlab = "Forcing variable", ylab = "Treatment status", 
+     pch = 16) 
+abline(v = 0, lty = 3)
+```
+
+<div style="color:blue">
+We observe a cut-point at 50% of the vote share, which is the potential running variable. From the graph we see that the cut-point fully determines whether an MP gets elected or not. So yes, a sharp RD design using vote share as the running/forcing variable makes sense. 
+</div>
+
+<br> 
+
+(b) Choose a bandwidth that seems reasonable to you, cut down the dataset to the discontinuity sample, and then estimate the LATE at the threshold using a linear model with common slopes for treated and control units within the bandwidth. Provide a plot in which you show the fitted curves and the underlying scatterplot of the data. Interpret your estimate. [4 pts]
+
+```{r, message=F}
+# sample size
+nrow(dat)
+
+# the sample is pretty small, so we probably cannot afford throwing away too much information. we choose a pretty generous bandwidth here: h = 20
+dat <- filter(dat, abs(forcing) <= 20)
+
+# run linear model with common slope
+lin_common_slope <- lm(changeNL_1996_2000 ~ treatment + forcing, data = dat)
+summary(lin_common_slope)
+
+# plot relationship
+plot(dat$forcing, dat$changeNL_1996_2000, 
+     main = "Linear model with common slope", 
+     xlab = "Forcing variable", ylab = "Change in nightlights (1996-2000)")
+curve(lin_common_slope$coefficient[1] + 
+      lin_common_slope$coefficient[2] + 
+      lin_common_slope$coefficient[3]*x,
+      0, 50, add = T, lwd = 3, col = "red") 
+curve(lin_common_slope$coefficient[1] + 
+      lin_common_slope$coefficient[3]*x,
+      -30, 0, add = T, lwd = 3, col = "blue")
+```
+
+
+<div style="color:blue">
+Constituencies with MPs from the same party as the President receive somewhat less electrification over the next four years, which is somewhat unintuitive. We estimate a reduction of about -0.4 points of light emission in the next four years at the cut-off. The effect is not significant at conventional levels, however. 
+
+_Note to reviewers: The effect size reported here is specific to the chosen bandwidth, so it does not have to be the same as in this solution. What is important is that the linear common slop model is implemented, the results are visualized properly, and the interpretation of the results makes sense._
+</div>
+
+
+<br>
+
+(c) Conduct the same analysis as in part (b) except that you now use a quadratic model with different model coefficients for the treated and control groups! [2 pts]
+
+```{r, message=F}
+# run cubic model 
+quad <- lm(changeNL_1996_2000 ~ treatment + forcing + I(treatment*forcing) + I(forcing^2) + I(treatment*(forcing^2)), data = dat)
+summary(quad)
+
+plot(dat$forcing, dat$changeNL_1996_2000, 
+     main = "Quadratic model", 
+     xlab = "Forcing variable", ylab = "Change in nightlights (1996-2000)")
+curve(quad$coefficient[1] + 
+      quad$coefficient[2] +  
+      quad$coefficient[3]*x + 
+      quad$coefficient[4]*x + 
+      quad$coefficient[5]*(x^2) + 
+      quad$coefficient[6]*(x^2), 
+      0, 50, add = T, lwd = 3, col = "red") 
+curve(quad$coefficient[1] + 
+      quad$coefficient[3]*x + 
+      quad$coefficient[5]*(x^2), 
+      -30, 0, add = T, lwd = 3, col = "blue")
+```
+
+
+<div style="color:blue">
+With a quadratic model, we estimate a reduction -0.09 points of light emission in the next four years (still not significant though). 
+
+_Note to reviewers: We did not explicitly ask for an interpretation here, so don't penalize authors who did not provide any._
+</div>
+
+<br>
+
+(d) Now estimate the LATE at the threshold using a local linear regression with a triangular kernel. Also, use the Imbens-Kalyanamaran optimal bandwidth calculation. [3 pts]
+
+
+```{r, message=F}
+# local linear regression with triangular kernel (RDestimate chooses bandwith using IK method by default)
+local_linear <- RDestimate(changeNL_1996_2000 ~ forcing, data = dat, se.type = "HC2") 
+plot(local_linear)
+summary(local_linear)
+```
+
+<div style="color:blue">
+The bandwidth chosen by the algorithm is much smaller than the one chosen by us. As a consequence the samples are very small now. For a bandwidth of about 3.8, the estimated effect on light emission is now positive and significant.
+
+_Note to reviewers: Again, we did not explicitly ask for an interpretation here, so don't penalize authors who did not provide any._
+</div>
+<br>
+
+
+(e) Going over the estimation results again, how robust are they to different specifications of the regression? What other types of robustness checks might be appropriate? [2 pts]
+
+<div style="color:blue">
+
+The results are not robust. The estimates depend on the model specification for the model how the outcome depends on the forcing variable.
+
+One could run a placebo test (using different cut-offs) or analyse if the other covariates are balanced at the cut-off point. 
+
+_Note to reviewers: The question whether the results are robust or not might depend on the author's bandwidth choices. Check whether the interpretation here is consistent with the results above. Be generous on the robustness checks part._
+</div>
+
+<br>
+
+
+#### 2 - Effects of a pre- and post-natal health care policy [12 points in total]
+
+The dataset `hospitals.dta` provides data collected on women who gave birth at any one of several hospitals in disadvantaged neighborhoods in New York. You will use these data to evaluate the effect of a government policy that makes available pre- and post-natal health care for pregnant women, new mothers, and their children, who meet certain income eligibility requirements. To receive services, the income of these women has to have been below $20,000 at the time they gave birth. The general question of interest is whether this program increases a measure of child health at age 3.
+
+
+```{r}
+dat <- read_dta("hospitals.dta")
+names(dat)
+```
+
+<br>
+
+(a) Create a scatterplot of reported income versus health status. Plot treated observations in red and controls in blue. [2 pts]
+
+
+```{r}
+ggplot(dat, aes(y = health, x = incomeR, color = program == TRUE)) + 
+  geom_point() + 
+  scale_color_manual(values=c("blue", "red"))
+```
+
+<div style="color:blue">
+(Not required to interpret here, but this is looks like a clear case for a sharp RDD.)
+
+_Note to reviewers: In this case, the treated observations are to the left of the threshold - they should be colored in red._
+</div>
+
+
+<br>
+
+(b) Calculate a naïve estimate of the effect of the program by running a regression of health on the indicator for program participation. What's the estimate, and why is it naïve? [2 pts]
+
+```{r}
+summary(lm(health ~ program, data = dat))
+```
+
+<div style="color:blue">
+There is a negative effect of the program on health. The program reduces the measure of child health at age 3 by -3.5. The estimate is "naïve" as there are plenty of potential confounders that influence the health of a child at age 3 and the assignment to the program - so we should not treat this as a credible causal estimate. Another way to argument that this is a naïve estimate is that it does not take the mechanism of treatment assignment (the relationship between running variable and treatment) into account.
+
+_Note to reviewers: Following the instruction, this should be a bivariate regression (no additional controls). Also, the interpretation should not refer to LATE - the regression is run on the entire sample, so it's not "local"._
+</div>
+
+<br>
+
+(c) Make yourself familiar with LOESS smoothing in R and plot overlaid LOESS curves (one for each program group) of this relationship to explore whether or not the relationship between reported income and health appears to be non-linear. [2 pts]
+
+```{r}
+ggplot(dat, aes(y = health, x = incomeR, color = program == TRUE)) + 
+  geom_point(size = .5) + 
+  scale_color_manual(values=c("blue", "red")) + 
+  geom_smooth(method = "loess", span = 0.5)
+```
+
+<div style="color:blue">
+_Note to reviewers: It is not important how LOESS smoothing is implemented here - base R or ggplot2 built-in capabilities. The outcome matters. In that sense, check whether the LOESS curves are properly fitted by program group._
+</div>
+
+<br>
+
+(d) Now fit an RD model of your choice and report and interpret its estimates. [2 pts]
+
+```{r}
+local_linear <- RDestimate(health ~ incomeR, data = dat, cutpoint = 20, se.type = "HC2") 
+summary(local_linear)
+```
+
+<br>
+
+<div style="color:blue">
+Here, we chose to estimate the LATE at the threshold using a local linear regression with a triangular kernel and use the Imbens-Kalyanamaran optimal bandwidth calculation.
+
+We find a positive effect of the program on health (CAREFUL: The treated group is left to the threshold, so the negative effect in the table is implies a positive effect for the treatment group!). The program increases the child health at age 3 by about 1 points on the scale. This specification is robust to changes in the bandwith.  
+
+_Note to reviewer: Any RDD specification and the right interpretation should earn full points here. However, the effect direction should be interpreted correctly._
+</div>
+<br>
+
+(e) A colleague now points out to you that some women may have incentives in these settings to misreport their actual income. Plot a histogram of reported income and look for anything that might support or refute such a claim. What assumption is called into question if women are truly misreporting in this manner? [2 pts]
+
+```{r}
+ggplot(filter(dat, incomeR > 10 & incomeR < 30), aes(x = incomeR)) +
+  geom_histogram(binwidth = .5) +
+  geom_vline(xintercept = 20)
+```
+
+<div style="color:blue">
+When looking at the distribution of income at the cut-off, we ineed observe an unusal increase in women who report an income just below 20'000. This seems to support the claim of the colleague.
+
+It calls the assumption of continuity of average potential outcomes into question, as respondents seem to sort into treatment by misreporting their income.
+</div>
+<br>
+
+(f) Another colleague points out to you that several other government programs (including food stamps etc.) have the same income threshold for eligibility. How might this knowledge impact your interpretation of your results? [2 pt]
+
+<div style="color:blue">
+When the threshold is not uniquely linked to one cause, it might be impossible to apply RDD to identify the effect of one single given program, in particular if it seems likely that individuals are affected by more than just one of these programs.
+</div>
+<br>
+
