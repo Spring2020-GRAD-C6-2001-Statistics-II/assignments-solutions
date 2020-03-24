@@ -59,14 +59,14 @@ We observe a cut-point at 50% of the vote share, which is the potential running 
 nrow(dat)
 
 # the sample is pretty small, so we probably cannot afford throwing away too much information. we choose a pretty generous bandwidth here: h = 20
-dat <- filter(dat, abs(forcing) <= 20)
+dat_cut <- filter(dat, abs(forcing) <= 20)
 
 # run linear model with common slope
-lin_common_slope <- lm(changeNL_1996_2000 ~ treatment + forcing, data = dat)
+lin_common_slope <- lm(changeNL_1996_2000 ~ treatment + forcing, data = dat_cut)
 summary(lin_common_slope)
 
 # plot relationship
-plot(dat$forcing, dat$changeNL_1996_2000, 
+plot(dat_cut$forcing, dat_cut$changeNL_1996_2000, 
      main = "Linear model with common slope", 
      xlab = "Forcing variable", ylab = "Change in nightlights (1996-2000)")
 curve(lin_common_slope$coefficient[1] + 
@@ -92,10 +92,10 @@ _Note to reviewers: The effect size reported here is specific to the chosen band
 
 ```{r, message=F}
 # run cubic model 
-quad <- lm(changeNL_1996_2000 ~ treatment + forcing + I(treatment*forcing) + I(forcing^2) + I(treatment*(forcing^2)), data = dat)
+quad <- lm(changeNL_1996_2000 ~ treatment + forcing + I(treatment*forcing) + I(forcing^2) + I(treatment*(forcing^2)), data = dat_cut)
 summary(quad)
 
-plot(dat$forcing, dat$changeNL_1996_2000, 
+plot(dat_cut$forcing, dat_cut$changeNL_1996_2000, 
      main = "Quadratic model", 
      xlab = "Forcing variable", ylab = "Change in nightlights (1996-2000)")
 curve(quad$coefficient[1] + 
@@ -133,7 +133,7 @@ summary(local_linear)
 <div style="color:blue">
 The bandwidth chosen by the algorithm is much smaller than the one chosen by us. As a consequence the samples are very small now. For a bandwidth of about 3.8, the estimated effect on light emission is now positive and significant.
 
-_Note to reviewers: Again, we did not explicitly ask for an interpretation here, so don't penalize authors who did not provide any._
+_Note to reviewers: Again, we did not explicitly ask for an interpretation here, so don't penalize authors who did not provide any. Also, it makes very much sense to return to the original dataset here because the method takes over choosing the bandwidth on its own. If the author missed that, however, it should not be penalized this time (the original solution contained an error here)._
 </div>
 <br>
 
