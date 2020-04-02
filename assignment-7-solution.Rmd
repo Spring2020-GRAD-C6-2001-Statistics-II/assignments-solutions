@@ -1,0 +1,185 @@
+---
+title: "Assignment 7 - Solution - Statistics II, Hertie School"
+output: html_document
+---
+
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(haven)
+library(plm)
+library(stargazer)
+```
+
+<br>
+
+#### 1 - Traveling through time with Bert and Ernie [15 points in total]
+
+Recall the Sesame Street study from the Assignment 5 (dataset `sesame.dta` - variable descriptions here: http://www.stat.columbia.edu/~gelman/arm/examples/sesame/sesame.vars.doc). Since we have pre-test measures available for the study participants, we can use difference-in-differences as a strategy to get causal estimates of both the ITT effect and the effect of the treatment on the treated.
+
+```{r, message=F}
+dat <- read_dta("sesame.dta")
+names(dat)
+```
+
+<br> 
+
+(a) First, create a new variable representing the change in scores between the post-test (in letter recognition) and pre-test (in letter recognition) and call it `change_let`. Plot the distribution of this outcome variable separately for those who were encouraged (red color) vs. those who were not (blue color). [2 pts]
+
+```{r}
+dat$change_let <- dat$postlet - dat$prelet
+
+ggplot(dat, aes(x = change_let, fill = as.factor(encour))) +
+    geom_density(alpha=0.4) + 
+  scale_fill_manual(values = c("blue","red"))
+```
+
+<br>
+
+(b) Let's ignore the experimental setup for now and just focus on the regular consumption of Sesame Street as explanatory variable (`regular`). Run the following two analyses: Regression of `postlet` on `regular` and regression of `change_let` on `regular`. For each, describe which estimand is targeted. Also, how do the coefficients compare? Does this make sense? [4 pts]
+
+```{r}
+treat_control_after <- lm(postlet ~ regular, data = dat)
+diff_in_diff <- lm(change_let ~ regular, data = dat)
+```
+
+```{r results="asis"}
+stargazer(treat_control_after, diff_in_diff, type = "html")
+```
+
+<br>
+
+<div style="color:blue">
+The treat_control_after model provides the treatment-control comparison after treatment. This does not account for pre-treatment differences. 
+
+The diff_in_diff model provides the difference-in-differences estimand. We compare the change (or difference) in scores between treatment and control group.
+</div>
+
+<br> 
+
+(c) What assumptions do we need to buy in order to trust causal interpretations of the estimates above (hint: assumptions will be slightly different for each)? How plausible are these assumptions? [4 pts]
+
+<div style="color:blue">
+For the `treat_control_after` model, we need the mean ignorability of treatment assignment assumption. We use the treatment indicator, which was not fully randomly assigned, so there may be lots of potential confounders that create baseline differences in the scores, which also affect the after-treatment comparisons. 
+
+For the `diff_in_diff` model, we account for baseline difference by just looking at the changes over time. However, regular is not the randomized encouragement variable and is therefore confounded by differential encouragement impact between t0 and t1. We therefore should not assume parallel trends between these groups. 
+</div>
+
+<br>
+
+(d) Now run a model within the DD framework, making use of the encouragement variable `encour` instead of the `regular` variable, and provide a revised estimate. Note: You might have to make the data format "long", i.e. have two rows per observations. Check out how to achieve this here: http://www.cookbook-r.com/Manipulating_data/Converting_data_between_wide_and_long_format/ (We  recommend the `gather()` function.) [3 pts]
+
+```{r}
+dat_sub <- dplyr::select(dat, id, prelet, postlet, encour)
+dat_long <- gather(dat_sub, period, value, prelet:postlet) # make long format
+dat_long$post <- ifelse(dat_long$period == "prelet", 0, 1)
+diff_in_diff <- lm(value ~ encour*post, data = dat_long)
+
+change <- lm(change_let ~ encour, data = dat) # alternative way of estimation using the change variable as Y; not necessary to report
+```
+
+```{r results="asis"}
+stargazer(diff_in_diff, type = "html")
+```
+
+<br>
+
+(e) Based on your results, provide a brief policy recommendation to the federal government regarding their funding of public television. (No more than 3 sentences). [2 pts]
+
+<div style="color:blue">
+Sesame Street is a good show that might actually help kids get better at important skills, such as letter recognition. Keep it alive and maybe create incentives to distribute it further! We have to check other relevant outcomes though...
+</div>
+
+
+<br>
+
+#### 3 - Vehicle fatalities and drinking policies [10 points in total]
+
+We will use the dataset `fatality.dta` that contains data for the vehicle fatality rate in each of the 48 contiguous United States across 7 years as well as information on various policies in each state that are thought to be associated with drinking and driving and related demographic variables aggregated at the state level (fatality). (Variable description available here: http://fmwww.bc.edu/ec-p/data/stockwatson/fatality.des.) For interpretation, assume the vehicle fatality rate is measured as deaths per 10,000 registered drivers and the beer tax is measured as dollars per case of beer.
+
+<div style="color:red">
+Important note: the variable `mrall` seems to report the rate vehicle fatality rate per driver, not per 10,000 drivers. Based on other sources (e.g., https://en.wikipedia.org/wiki/Motor_vehicle_fatality_rate_in_U.S._by_year), we would believe that the fatality rate per 10,000 people in the 1980s in the United States is about 1.8. This is what we get close to when we multiply `mrall` with 10000. If you got this wrong and just continued with `mrall`, this is no problem and should not be penalized. In the following, we report the results based on the corrected variable `mrall10k`. Accordingly, the effect sizes should be higher by factor 10000.
+</div>
+
+
+```{r, message=F}
+dat <- read_dta("fatality.dta")
+
+# correct mrall variable
+summary(dat$mrall)
+dat$mrall10k <- dat$mrall * 10000
+summary(dat$mrall10k)
+```
+
+<br>
+
+(a) Run a regression of the vehicle fatality rate on the policy variable `beer tax` and potential confounding covariates per capita income, unemployment rate, the percentage of drivers between the ages of 15 and 24, and the average miles driven. Report the coefficient on beer tax and interpret without using a causal interpretation. [2 pts]
+
+```{r, message=F}
+model_pooled_10k <- lm(mrall10k ~ beertax + perinc + unrate + yngdrv + vmiles, data = dat)
+model_pooled <- lm(mrall ~ beertax + perinc + unrate + yngdrv + vmiles, data = dat)
+range(dat$beertax)
+range(dat$mrall10k)
+```
+
+```{r results="asis"}
+stargazer(model_pooled, model_pooled_10k, type = "html")
+```
+
+<br>
+
+<div style="color:blue">
+<i>The second model with dependent variable mrall10k is interpreted in the following; the other model with mrall is reported just to show that the results are equivalent except for a scale difference.</i>
+
+Conditioning on the listed observables, there is a positive association between a tax on beer and vehicle fatality rate. More precisely, an increase in the beer tax by one dollar per case of beer is associated with an increase of 0.1 deaths per 10,000 registered drivers.
+</div>
+
+<br>
+
+(b) Run the same regression as in (a) but now using the unit fixed-effects estimator. How does the coefficient on beer tax change? What is your causal interpretation of it? What assumptions are necessary for the causal interpretation to be valid? [4 pts]
+
+```{r, message=F}
+model_fe <- plm(mrall10k ~ beertax + perinc + unrate + yngdrv + vmiles, data = dat, index = c("state", "year"), model = "within")
+```
+
+
+```{r results="asis"}
+stargazer(model_fe, type = "html")
+```
+
+<br> 
+
+<div style="color:blue">
+Adding state-level fixed effects to the model, i.e. accounting for unobserved, time-invariant characteristics of states and only focusing on within-state variation, an increase in the beer tax by one dollar per case of beer causes a decrease of the death rate per 10,000 registered drivers by 0.5. This assumes the absence of global time-specific shocks driving the result as well as no confounding by time-variant idiosyncratic unobservables.
+</div>
+
+<br>
+
+(c) Run the same regression as in (b) but now adding year fixed effects as well. How does the effect of beer tax change? [2 pts]
+
+```{r, message=F}
+model_fe2 <- plm(mrall10k ~ beertax + perinc + unrate + yngdrv + vmiles, data = dat, index = c("state", "year"), model = "within", effect = "twoways")
+```
+
+```{r results="asis"}
+stargazer(model_fe2, type = "html")
+```
+
+<br> 
+
+<div style="color:blue">
+Compared to the unit fixed effects model, the results do not change much. We still see that an increase in the beer tax by one dollar per case of beer causes a decrease of the death rate per 10,000 registered drivers by about  0.5. We still assume no confounding by time-variant idiosyncratic unobservables.
+<i>Note to reviewers: No detailed interpretation required here.</i>
+</div>
+
+<br>
+
+(d) Make a brief policy recommendation to the U.S. federal transportation department about whether or not they should adopt a federal beer tax as a means of reducing the vehicle fatality rate. (No more than 3 sentences). [2 pts]
+
+<div style="color:blue">
+There is some indication that a federal beer tax helps lower the death rate among registered drivers. Given that the average vehicle fatality rate per 10,000 drivers in our sample is about 2, an effect of -0.5 is massive: It could help lower the average death rate by 25%. Although we did not check for heterogeneity of effects, this is an important result that supports the idea of introducing a federal beer tax.
+<i>Note to reviewers: Please also accept interpretations that are much more skeptical about the impact because of the much lower effect size when using the original `mrall` variable. The interpretation just should be internally consistent. </i>
+</div>
+
+
+
